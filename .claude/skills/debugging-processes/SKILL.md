@@ -20,7 +20,7 @@ For a full provenance dump including input/output files:
 verdi process dump <PK>         # dump a process and its provenance
 ```
 
-For CalcJobs specifically, jump to the remote working directory on the HPC (requires SSH access, which may not be available for sandboxed agents):
+For CalcJobs specifically, jump to the remote working directory on the HPC (requires SSH access):
 
 ```bash
 verdi calcjob gotocomputer <PK>
@@ -29,47 +29,57 @@ verdi calcjob gotocomputer <PK>
 ## Inspecting the daemon
 
 ```bash
-# storage (PostgreSQL or SQLite) + daemon & broker (RabbitMQ, if configured):
-verdi status
-# tail daemon logs in real-time
-# best with a single daemon worker, multiple workers garble output:
-verdi daemon logshow
-# requeue processes stuck after a daemon crash (stop the daemon first):
-verdi process repair
+verdi status                    # storage + daemon & broker status
+verdi daemon logshow            # tail daemon logs (best with a single worker)
+verdi process repair            # requeue processes stuck after a daemon crash (stop daemon first)
 ```
 
 ## Common failure modes
 
-- **Process stuck in `waiting`** : usually means the daemon lost track of it after a crash or restart. Run `verdi process repair` to requeue.
-- **Process state inconsistent with node attributes** : check whether `seal()` has been called; only `_updatable_attributes` can change on a stored `ProcessNode` before sealing.
-- **`presto`-marked test failures** : these use an in-memory `SqliteTempBackend`, so the bug is in the code, not in service configuration.
-- **Daemon subprocess killed on shutdown** : daemon-launched subprocesses must pass `start_new_session=True` or they inherit the daemon's signal handling and die with it.
+### General AiiDA issues
+
+- **Process stuck in `waiting`**: daemon lost track after a crash/restart. Run `verdi process repair`.
+- **Process state inconsistent**: check whether `seal()` has been called on the node.
+
+### Quantum ESPRESSO–specific issues
+
+- **SCF convergence not reached** (`ERROR_CONVERGENCE_NOT_REACHED`): `PwBaseWorkChain` automatically retries with adjusted `mixing_beta` or `diagonalization`. If it exhausts all handlers the work chain exits with `ERROR_UNRECOVERABLE_FAILURE`.
+- **Ionic convergence not reached**: reported as `ERROR_IONIC_CONVERGENCE_NOT_REACHED`; `PwBaseWorkChain` may restart with smaller `ion_dynamics` step.
+- **XML parse failure**: `PwParser` raises if `aiida.xml` is missing or malformed. Check the remote folder for `aiida.xml`; the file may be absent if pw.x crashed early (walltime, OOM, missing pseudos).
+- **Missing/wrong pseudopotentials**: CalcJob raises `ERROR_INVALID_INPUT_PSEUDO_POTENTIALS` during `prepare_for_submission`. Verify pseudo labels match structure kind names exactly.
+- **Walltime exceeded**: CalcJob exits with `ERROR_SCHEDULER_OUT_OF_WALLTIME`; the `BaseWorkChain` restart handler will copy the remote folder and restart from the latest checkpoint.
+- **Known unrecoverable errors** (`ERROR_KNOWN_UNRECOVERABLE_FAILURE`, code 310): the error handler recognised the QE error but cannot fix it (e.g., `read_namelists` crash). Inspect `verdi process report <PK>` for the matched error message.
 
 ## Interactive inspection
 
 ```bash
-verdi shell                       # interactive IPython shell with AiiDA loaded
-verdi devel run-sql "SELECT ..."  # run raw SQL against the profile database (USE WITH CAUTION)
+verdi shell                                    # IPython shell with AiiDA loaded
+verdi devel run-sql "SELECT ..."               # raw SQL against the profile DB (USE WITH CAUTION)
 ```
 
 Useful patterns inside `verdi shell`:
 
 ```python
-from aiida.orm import QueryBuilder, Node, load_node
+from aiida.orm import load_node, QueryBuilder
 
-# Find nodes by type
-qb = QueryBuilder().append(Node, filters={'node_type': {'like': 'data.core.dict.%'}})
-
-# Inspect a specific node
 node = load_node(<PK>)
-node.base.attributes.all   # all stored attributes
-node.base.extras.all        # all extras (mutable even after storing)
-node.base.repository.list_object_names()  # files in the node's repository
+node.base.attributes.all              # stored attributes
+node.base.extras.all                  # extras (mutable)
+node.base.repository.list_object_names()  # files in node repository
+
+# Read a retrieved output file
+with node.outputs.retrieved.open('aiida.out') as f:
+    print(f.read())
 ```
 
-## Related source
+## Relevant source in this repo
 
-- Process runner: `src/aiida/engine/runners.py`
-- Daemon client: `src/aiida/engine/daemon/client.py`
-- CalcJob exec manager (file copying, job submission, retrieval): `src/aiida/engine/daemon/execmanager.py`
-- Transport tasks (submit, update, retrieve): `src/aiida/engine/processes/calcjobs/tasks.py`
+| File | Purpose |
+|------|---------|
+| `src/aiida_quantumespresso/workflows/pw/base.py` | `PwBaseWorkChain` — error handlers and exit codes |
+| `src/aiida_quantumespresso/workflows/ph/base.py` | `PhBaseWorkChain` — error handlers |
+| `src/aiida_quantumespresso/workflows/neb/base.py` | `NebBaseWorkChain` — error handlers |
+| `src/aiida_quantumespresso/parsers/pw.py` | `PwParser` — top-level parser logic |
+| `src/aiida_quantumespresso/parsers/parse_xml/parse.py` | XML schema-based output parser |
+| `src/aiida_quantumespresso/parsers/parse_raw/pw.py` | stdout text parser |
+| `src/aiida_quantumespresso/calculations/pw.py` | `PwCalculation` — exit codes and input preparation |
