@@ -59,13 +59,7 @@ Assign exception messages to a variable before raising: `msg = f'...'; raise Typ
 
 The following Claude Code skills (under `.claude/skills/`) provide task-specific guidance. Listed here as a reference for all agents:
 
-- `adding-a-cli-command`: `verdi` subcommands and import-time constraints
-- `adding-dependencies`: third-party dependency checklist
-- `architecture-overview`: codebase structure, key files, ABCs
 - `commit-conventions`: branching, commit style, PR requirements
-- `debugging-processes`: diagnosing failed or stuck processes and the daemon
-- `deprecating-api`: deprecation warnings and removal timeline
-- `linting-and-ci`: pre-commit, CI checks
 - `running-tests`: pytest cheatsheet, plugins, fixtures
 - `writing-and-building-docs`: documentation style and building
 - `writing-tests`: test philosophy, markers, parametrization
