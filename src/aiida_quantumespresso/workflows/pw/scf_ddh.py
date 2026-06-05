@@ -252,14 +252,26 @@ class PwSelfConsistentDDHWorkChain(ProtocolMixin, WorkChain):
 
     def run_scf_metal(self):
         """Run a plain-PBE SCF for metallic systems."""
+        from aiida_quantumespresso.workflows.protocols.utils import recursive_merge
+
+        inputs = AttributeDict(self.ctx.scf_inputs)
+        inputs.pw = AttributeDict(self.ctx.scf_inputs.pw)
+        inputs.pw.parameters = copy.deepcopy(self.ctx.scf_inputs.pw.parameters)
+
+        # Default PBE fallback: strip hybrid functional settings.
+        inputs.pw.parameters['SYSTEM'].pop('input_dft', None)
+        inputs.pw.parameters['SYSTEM'].pop('exx_fraction', None)
+
         if 'scf_metal' in self.inputs:
-            inputs = AttributeDict(self.exposed_inputs(PwBaseWorkChain, namespace='scf_metal'))
-        else:
-            inputs = AttributeDict(self.ctx.scf_inputs)
-            inputs.pw = AttributeDict(self.ctx.scf_inputs.pw)
-            inputs.pw.parameters = copy.deepcopy(self.ctx.scf_inputs.pw.parameters)
-            inputs.pw.parameters['SYSTEM'].pop('input_dft', None)
-            inputs.pw.parameters['SYSTEM']['exx_fraction'] = 0.0
+            for key, value in self.exposed_inputs(PwBaseWorkChain, namespace='scf_metal').items():
+                if key == 'pw':
+                    for pw_key, pw_value in value.items():
+                        if pw_key == 'parameters':
+                            inputs.pw.parameters = recursive_merge(inputs.pw.parameters, pw_value.get_dict())
+                        else:
+                            inputs.pw[pw_key] = pw_value
+                else:
+                    inputs[key] = value
 
         inputs.pw.structure = self.inputs.structure
         inputs.metadata.call_link_label = 'scf_metal'
