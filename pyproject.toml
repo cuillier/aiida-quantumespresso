@@ -100,6 +100,7 @@ aiida-quantumespresso = 'aiida_quantumespresso.cli:cmd_root'
 'quantumespresso.pdos' = 'aiida_quantumespresso.workflows.pdos:PdosWorkChain'
 'quantumespresso.bands.base' = 'aiida_quantumespresso.workflows.bands.base:BandsBaseWorkChain'
 'quantumespresso.neb.base' = 'aiida_quantumespresso.workflows.neb.base:NebBaseWorkChain'
+'quantumespresso.pw.scf_ddh' = 'aiida_quantumespresso.workflows.pw.scf_ddh:PwSelfConsistentDDHWorkChain'
 
 [project.optional-dependencies]
 docs = [
